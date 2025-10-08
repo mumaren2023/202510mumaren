@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tetris Game</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app">
+    <section class="playfield" aria-label="Tetris playfield">
+      <canvas id="board" width="240" height="480" role="presentation"></canvas>
+      <div class="overlay" id="overlay" hidden>
+        <h1 id="overlay-title">Paused</h1>
+        <p id="overlay-subtitle"></p>
+        <button type="button" id="resume-btn">Resume</button>
+      </div>
+    </section>
+    <aside class="sidebar">
+      <header>
+        <h1>Modern Tetris</h1>
+        <p>Use the arrow keys or swipe to move pieces. Press <kbd>Space</kbd> to hard drop.</p>
+      </header>
+      <dl class="stats">
+        <div>
+          <dt>Score</dt>
+          <dd id="score">0</dd>
+        </div>
+        <div>
+          <dt>Level</dt>
+          <dd id="level">1</dd>
+        </div>
+        <div>
+          <dt>Lines</dt>
+          <dd id="lines">0</dd>
+        </div>
+      </dl>
+      <section class="next-piece">
+        <h2>Next</h2>
+        <canvas id="next" width="120" height="120" role="presentation"></canvas>
+      </section>
+      <div class="controls">
+        <button type="button" id="start-btn">Start</button>
+        <button type="button" id="pause-btn">Pause</button>
+        <button type="button" id="reset-btn">Reset</button>
+      </div>
+      <section class="touch-pad" aria-label="On-screen controls">
+        <button type="button" data-action="left" aria-label="Move left">◀</button>
+        <button type="button" data-action="rotate" aria-label="Rotate">⟳</button>
+        <button type="button" data-action="right" aria-label="Move right">▶</button>
+        <button type="button" data-action="down" aria-label="Soft drop">▼</button>
+        <button type="button" data-action="drop" aria-label="Hard drop">⤓</button>
+      </section>
+      <footer>
+        <p>Built with vanilla JavaScript.</p>
+      </footer>
+    </aside>
+  </main>
+  <script src="script.js" type="module"></script>
+</body>
+</html>
