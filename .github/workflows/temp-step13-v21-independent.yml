@@ -8,15 +8,17 @@ on:
       - main
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 jobs:
   audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
       - name: Download source immediately
         env:
-          SOURCE_URL: "https://sdmntprkoreacentral.oaiusercontent.com/files/00000000-49c4-8206-9c5f-e7e733180d38/raw?se=2026-07-22T13:29:15Z&sp=r&sv=2026-02-06&sr=b&scid=25cc6d77-681b-59dc-a372-54c9828a04b0&skoid=1e4bb9ed-6bb5-424a-a3aa-79f21566e722&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-07-21T22:38:23Z&ske=2026-07-23T22:38:23Z&sks=b&skv=2026-02-06&sig=PaQNpvtuRp1sZI4RsvszksAxHsuqQmcYsD7HL0L4MwA%3D"
+          SOURCE_URL: "https://sdmntprkoreacentral.oaiusercontent.com/files/00000000-5d20-8206-a564-5f2f76e26e4f/raw?se=2026-07-22T13:35:20Z&sp=r&sv=2026-02-06&sr=b&scid=2e89c39f-ce0d-52cd-bb3d-3240179726d6&skoid=1e4bb9ed-6bb5-424a-a3aa-79f21566e722&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-07-21T23:52:38Z&ske=2026-07-23T23:52:38Z&sks=b&skv=2026-02-06&sig=e8C%2BEtEiCno5JdkLZiKRkZHTpz0JHjT4xkZlmEtaVWI%3D"
         run: |
           curl --fail --location --retry 3 "$SOURCE_URL" --output "$RUNNER_TEMP/step13-v21-source.zip"
           test -s "$RUNNER_TEMP/step13-v21-source.zip"
@@ -24,21 +26,41 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install audit dependencies
+        run: pip install -q jsonschema python-docx openpyxl
+      - name: Run full audit and capture error
         run: |
-          pip install -q jsonschema python-docx openpyxl
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq libreoffice-writer poppler-utils fonts-noto-cjk
-      - name: Run full independent acceptance
-        run: |
+          set +e
           python tools/temp_step13_v21_independent_run.py \
             --source-zip "$RUNNER_TEMP/step13-v21-source.zip" \
-            --output-dir "$RUNNER_TEMP/step13-v21-independent-output"
-      - name: Upload independent acceptance artifact
+            --output-dir "$RUNNER_TEMP/step13-v21-independent-output" \
+            > "$RUNNER_TEMP/full-audit.log" 2>&1
+          echo "$?" > "$RUNNER_TEMP/full-audit-exit.txt"
+          exit 0
+      - name: Publish concise full-audit error
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo '### Full independent audit debug'
+            echo
+            echo 'Exit code:'
+            echo '```'
+            cat "$RUNNER_TEMP/full-audit-exit.txt"
+            echo '```'
+            echo 'Log tail:'
+            echo '```text'
+            tail -n 160 "$RUNNER_TEMP/full-audit.log"
+            echo '```'
+          } > "$RUNNER_TEMP/comment.md"
+          gh pr comment 5 --repo mumaren2023/202510mumaren --body-file "$RUNNER_TEMP/comment.md"
+      - name: Upload debug artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: step13-v21-independent-audit-final
+          name: step13-v21-independent-audit-debug-full
           path: |
             ${{ runner.temp }}/step13-v21-independent-output/**
-            ${{ runner.temp }}/step13_v21_independent_audit_artifact.zip
-          if-no-files-found: error
+            ${{ runner.temp }}/full-audit.log
+            ${{ runner.temp }}/full-audit-exit.txt
+          if-no-files-found: warn
           retention-days: 3
