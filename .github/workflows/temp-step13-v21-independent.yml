@@ -1,0 +1,38 @@
+name: temp-step13-v21-independent
+on:
+  push:
+    branches:
+      - temp-step13-v21-independent-20260722
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install audit dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install jsonschema python-docx openpyxl
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libreoffice-writer poppler-utils fonts-noto-cjk
+      - name: Run independent audit
+        env:
+          SOURCE_URL: "https://sdmntprkoreacentral.oaiusercontent.com/files/00000000-ac34-8206-8ff4-84a2b4845a3a/raw?se=2026-07-22T13:04:55Z&sp=r&sv=2026-02-06&sr=b&scid=f30e1f31-8b96-5330-a4b6-c92d36733da5&skoid=1e4bb9ed-6bb5-424a-a3aa-79f21566e722&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-07-21T23:57:26Z&ske=2026-07-23T23:57:26Z&sks=b&skv=2026-02-06&sig=BImK1fMdmdZGACcNo5xVrv5M4rLvRODBX2xTIA5DCNg%3D"
+        run: |
+          python tools/temp_step13_v21_independent_audit.py \
+            --source-url "$SOURCE_URL" \
+            --output-dir "$RUNNER_TEMP/step13-v21-independent-output"
+      - name: Upload independent audit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: step13-v21-independent-audit
+          path: |
+            ${{ runner.temp }}/step13-v21-independent-output/**
+            ${{ runner.temp }}/step13_v21_independent_audit_artifact.zip
+          if-no-files-found: error
+          retention-days: 3
