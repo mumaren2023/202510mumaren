@@ -14,6 +14,12 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - name: Download source immediately
+        env:
+          SOURCE_URL: "https://sdmntprkoreacentral.oaiusercontent.com/files/00000000-4234-8206-83cb-223d4704a6c4/raw?se=2026-07-22T13:13:49Z&sp=r&sv=2026-02-06&sr=b&scid=e1588825-7e58-5c1e-8979-6e4438a6ef37&skoid=1e4bb9ed-6bb5-424a-a3aa-79f21566e722&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-07-21T23:35:56Z&ske=2026-07-23T23:35:56Z&sks=b&skv=2026-02-06&sig=lr03S1dJcGJYeVaVFMnonbbpaffCs2S75fLnatFfu%2Bo%3D"
+        run: |
+          curl --fail --location --retry 3 "$SOURCE_URL" --output "$RUNNER_TEMP/step13-v21-source.zip"
+          test -s "$RUNNER_TEMP/step13-v21-source.zip"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -24,11 +30,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq libreoffice-writer poppler-utils fonts-noto-cjk
       - name: Run independent audit
-        env:
-          SOURCE_URL: "https://sdmntprkoreacentral.oaiusercontent.com/files/00000000-4d48-8206-afe5-33896331519c/raw?se=2026-07-22T13:12:13Z&sp=r&sv=2026-02-06&sr=b&scid=99e6ab95-e788-5093-bf89-bfc7c4a9ab65&skoid=1e4bb9ed-6bb5-424a-a3aa-79f21566e722&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-07-21T23:53:21Z&ske=2026-07-23T23:53:21Z&sks=b&skv=2026-02-06&sig=si7Lhcy8CoaaL/StQd7g9EelUbVXs49WC%2BltuDgSApA%3D"
         run: |
           python tools/temp_step13_v21_independent_audit.py \
-            --source-url "$SOURCE_URL" \
+            --source-url "file://$RUNNER_TEMP/step13-v21-source.zip" \
             --output-dir "$RUNNER_TEMP/step13-v21-independent-output"
       - name: Upload independent audit artifact
         uses: actions/upload-artifact@v4
