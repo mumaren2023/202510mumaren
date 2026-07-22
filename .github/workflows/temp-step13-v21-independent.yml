@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - temp-step13-v21-independent-20260722
+  pull_request:
+    branches:
+      - main
 permissions:
   actions: read
   contents: read
