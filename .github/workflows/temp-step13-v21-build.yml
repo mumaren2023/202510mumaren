@@ -13,14 +13,27 @@ jobs:
   report:
     runs-on: ubuntu-latest
     steps:
-      - name: Read successful build result
+      - name: Print compact V2.1 metrics
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p /tmp/result
           gh run download 29920187221 --repo mumaren2023/202510mumaren --name step13-v21-build-diagnostics --dir /tmp/result
-          echo '--- FINAL RESULT LINES ---'
-          grep -nE 'complete_sha256|complete_zip|v20_regression|v21_tests|manifest_entries|history_v20_files|output_dir|outputs' /tmp/result/build.log || true
-          echo '--- FINAL 100 LINES ---'
-          tail -n 100 /tmp/result/build.log
-          echo '--- END ---'
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          text=Path('/tmp/result/build.log').read_text(encoding='utf-8',errors='replace')
+          marker='"complete_sha256"'
+          pos=text.rfind(marker)
+          start=text.rfind('{',0,pos)
+          depth=0; end=None
+          for i in range(start,len(text)):
+              if text[i]=='{': depth+=1
+              elif text[i]=='}':
+                  depth-=1
+                  if depth==0:
+                      end=i+1; break
+          data=json.loads(text[start:end])
+          compact={k:data.get(k) for k in ['complete_zip','complete_sha256','v20_regression','v21_tests','manifest_entries','history_v20_files','outputs']}
+          print(json.dumps(compact,ensure_ascii=False,indent=2))
+          PY
