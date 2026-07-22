@@ -7,41 +7,31 @@ on:
     branches:
       - main
 permissions:
-  actions: read
   contents: read
-  issues: write
-  pull-requests: write
 jobs:
-  inspect:
+  blank:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Download final audit artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Generate true blank DOCX
         run: |
-          mkdir -p "$RUNNER_TEMP/final-artifact"
-          gh run download 29924456427 --repo mumaren2023/202510mumaren --name step13-v21-independent-audit-final --dir "$RUNNER_TEMP/final-artifact"
-      - name: Publish selected hashes
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
+          pip install -q python-docx
           python - <<'PY'
-          import hashlib, json, os
+          from docx import Document
           from pathlib import Path
-          root=Path(os.environ['RUNNER_TEMP'])/'final-artifact'
-          wanted=[]
-          patterns=['*独立验收报告_V2.2_*.docx','*问题清单与证据台账_V2.2_*.xlsx','*机器审计摘要_V2.2_*.json','*文件SHA-256清单_V2.2_*.txt','independent_audit_result.json','独立验收_DOCX渲染检查_V2.2.json','step13_v21_independent_audit_artifact.zip']
-          for pattern in patterns:
-              for p in root.rglob(pattern):
-                  if p.is_file() and p not in wanted: wanted.append(p)
-          qa_paths=list(root.rglob('独立验收_DOCX渲染检查_V2.2.json'))
-          qa=json.loads(qa_paths[0].read_text()) if qa_paths else {}
-          lines=['### Selected V2.2 artifact hashes','',f"Visual QA all pass: `{qa.get('all_pass')}`; pages: `{sum((x.get('pages') or 0) for x in qa.get('documents',[]))}`",'']
-          for p in wanted:
-              digest=hashlib.sha256(p.read_bytes()).hexdigest()
-              lines.append(f"- `{digest}`  `{p.name}`  ({p.stat().st_size} bytes)")
-          Path(os.environ['RUNNER_TEMP'],'hash-comment.md').write_text('\n'.join(lines))
+          out=Path('${{ runner.temp }}')/'空白页.docx'
+          doc=Document()
+          doc.save(out)
+          print(out, out.stat().st_size)
           PY
-          gh pr comment 5 --repo mumaren2023/202510mumaren --body-file "$RUNNER_TEMP/hash-comment.md"
+      - name: Upload blank DOCX
+        uses: actions/upload-artifact@v4
+        with:
+          name: true-blank-docx
+          path: ${{ runner.temp }}/空白页.docx
+          if-no-files-found: error
+          retention-days: 1
