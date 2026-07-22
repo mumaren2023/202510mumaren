@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Download source immediately
         env:
-          SOURCE_URL: "https://sdmntprkoreacentral.oaiusercontent.com/files/00000000-dc18-8206-80a7-5728717eeffe/raw?se=2026-07-22T13:23:02Z&sp=r&sv=2026-02-06&sr=b&scid=e7864ed3-ce73-56ce-8600-997e9a13bd99&skoid=1e4bb9ed-6bb5-424a-a3aa-79f21566e722&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-07-22T11:27:53Z&ske=2026-07-24T11:27:53Z&sks=b&skv=2026-02-06&sig=OYsBaLNUm1kUSOAZjsR0td43INQtiwmlcI3mvFgVIds%3D"
+          SOURCE_URL: "https://sdmntprkoreacentral.oaiusercontent.com/files/00000000-bfe4-8206-95c2-b9aa463e7780/raw?se=2026-07-22T13:25:28Z&sp=r&sv=2026-02-06&sr=b&scid=d0222e2c-c136-5bd0-b346-cfdadfc57f30&skoid=1e4bb9ed-6bb5-424a-a3aa-79f21566e722&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-07-21T23:52:38Z&ske=2026-07-23T23:52:38Z&sks=b&skv=2026-02-06&sig=%2BkUx0Q1BK2xQ%2BuKrBhiqCXjj3ZjHvkVNDX/6mVldDdM%3D"
         run: |
           curl --fail --location --retry 3 "$SOURCE_URL" --output "$RUNNER_TEMP/step13-v21-source.zip"
           test -s "$RUNNER_TEMP/step13-v21-source.zip"
@@ -33,27 +33,23 @@ jobs:
             --source-zip "$RUNNER_TEMP/step13-v21-source.zip" \
             --output "$RUNNER_TEMP/v20-history-diagnosis" \
             > "$RUNNER_TEMP/v20-history-diagnosis.log" 2>&1
-          cat "$RUNNER_TEMP/v20-history-diagnosis.log"
-      - name: Publish diagnosis to temporary PR
+      - name: Publish concise diagnosis
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          {
-            echo '### V2.0 history regression diagnosis'
-            echo
-            echo '```json'
-            cat "$RUNNER_TEMP/v20-history-diagnosis/v20_history_diagnosis.json"
-            echo '```'
-          } > "$RUNNER_TEMP/pr-comment.md"
           python - <<'PY'
+          import json, os
           from pathlib import Path
-          p=Path('${{ runner.temp }}/pr-comment.md')
-          text=p.read_text()
-          if len(text)>60000:
-              text=text[:59000]+'\n```\n\n[truncated]'
-              p.write_text(text)
+          src=Path(os.environ['RUNNER_TEMP'])/'v20-history-diagnosis'/'v20_history_diagnosis.json'
+          data=json.loads(src.read_text())
+          failures=data.get('failures',[])
+          lines=['### V2.0 concise failure diagnosis','',f"validator returncode: `{data.get('returncode')}`",'',f"failure entries: `{len(failures)}`",'']
+          for i,f in enumerate(failures[:12],1):
+              value=f.get('value',{})
+              lines += [f"#### {i}. `{f.get('path')}`",'```json',json.dumps(value,ensure_ascii=False,indent=2)[:6000],'```','']
+          Path(os.environ['RUNNER_TEMP'],'concise-comment.md').write_text('\n'.join(lines))
           PY
-          gh pr comment 5 --repo mumaren2023/202510mumaren --body-file "$RUNNER_TEMP/pr-comment.md"
+          gh pr comment 5 --repo mumaren2023/202510mumaren --body-file "$RUNNER_TEMP/concise-comment.md"
       - name: Upload diagnosis artifact
         if: always()
         uses: actions/upload-artifact@v4
