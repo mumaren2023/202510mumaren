@@ -10,45 +10,15 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  diagnostic:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Install build dependencies
-        run: python -m pip install --disable-pip-version-check python-docx openpyxl jsonschema
-      - name: Build and validate V2.1 candidate
-        id: build
-        shell: bash
+      - name: Read build diagnostic
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          set -uo pipefail
-          SOURCE_URL='https://sdmntprkoreacentral.oaiusercontent.com/files/00000000-6174-8206-ae39-f3ac63ff656c/raw?se=2026-07-22T12:18:06Z&sp=r&sv=2026-02-06&sr=b&scid=b204ba7a-6564-5a4f-9530-f8d900003057&skoid=1e4bb9ed-6bb5-424a-a3aa-79f21566e722&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-07-22T11:29:37Z&ske=2026-07-24T11:29:37Z&sks=b&skv=2026-02-06&sig=ZlPkqrcBKRKtfjGQh/Lz9kDuZhx/NSidEdfsKcxbzHA%3D'
-          {
-            set -x
-            curl -L --fail --retry 3 "$SOURCE_URL" -o /tmp/v20-source.zip
-            file /tmp/v20-source.zip
-            unzip -t /tmp/v20-source.zip
-            python tools/temp_step13_v21_repair.py \
-              --source-url "$SOURCE_URL" \
-              --output-dir /tmp/step13-v21-output
-            find /tmp/step13-v21-output -maxdepth 1 -type f -printf '%f\n' | sort
-            cat /tmp/step13-v21-output/build_result.json
-          } > /tmp/build.log 2>&1
-          STATUS=$?
-          tail -n 160 /tmp/build.log
-          exit $STATUS
-      - name: Upload build diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: step13-v21-build-diagnostics
-          path: /tmp/build.log
-          if-no-files-found: error
-          retention-days: 3
-      - name: Upload V2.1 candidate artifacts
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: step13-v21-candidate
-          path: /tmp/step13-v21-output/*
-          if-no-files-found: error
-          retention-days: 3
+          mkdir -p /tmp/diag
+          gh run download 29918787525 --repo mumaren2023/202510mumaren --name step13-v21-build-diagnostics --dir /tmp/diag
+          echo '--- BUILD DIAGNOSTIC ---'
+          cat /tmp/diag/build.log
+          echo '--- END DIAGNOSTIC ---'
