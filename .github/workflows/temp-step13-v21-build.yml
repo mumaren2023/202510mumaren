@@ -1,0 +1,27 @@
+name: TEMP Step13 V2.1 Build
+
+on:
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe OneDrive source link
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 3 'https://1drv.ms/w/s!ACvrbSoGybQogS8?download=1' -o /tmp/source.bin
+          ls -lh /tmp/source.bin
+          file /tmp/source.bin
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('/tmp/source.bin')
+          print(p.read_bytes()[:16])
+          PY
