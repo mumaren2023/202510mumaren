@@ -3,9 +3,6 @@ on:
   push:
     branches:
       - temp-step13-v21-independent-20260722
-  pull_request:
-    branches:
-      - main
 permissions:
   actions: read
   contents: read
@@ -23,7 +20,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/final-artifact"
           gh run download 29924456427 --repo mumaren2023/202510mumaren --name step13-v21-independent-audit-final --dir "$RUNNER_TEMP/final-artifact"
-      - name: Publish artifact manifest and visual QA
+      - name: Publish selected hashes
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -31,17 +28,17 @@ jobs:
           import hashlib, json, os
           from pathlib import Path
           root=Path(os.environ['RUNNER_TEMP'])/'final-artifact'
-          files=[]
-          for p in sorted(root.rglob('*')):
-              if p.is_file():
-                  files.append({'path':p.relative_to(root).as_posix(),'size':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()})
-          results=list(root.rglob('independent_audit_result.json'))
-          qa_files=list(root.rglob('独立验收_DOCX渲染检查_V2.2.json'))
-          result=json.loads(results[0].read_text()) if results else {}
-          qa=json.loads(qa_files[0].read_text()) if qa_files else {}
-          lines=['### Final independent audit artifact manifest','',f"Conclusion: **{result.get('conclusion')}**",'',f"Visual QA: `{json.dumps(qa,ensure_ascii=False)}`",'',f"Files: `{len(files)}`",'']
-          for item in files:
-              lines.append(f"- `{item['sha256']}`  `{item['path']}`  ({item['size']} bytes)")
-          Path(os.environ['RUNNER_TEMP'],'manifest-comment.md').write_text('\n'.join(lines))
+          wanted=[]
+          patterns=['*独立验收报告_V2.2_*.docx','*问题清单与证据台账_V2.2_*.xlsx','*机器审计摘要_V2.2_*.json','*文件SHA-256清单_V2.2_*.txt','independent_audit_result.json','独立验收_DOCX渲染检查_V2.2.json','step13_v21_independent_audit_artifact.zip']
+          for pattern in patterns:
+              for p in root.rglob(pattern):
+                  if p.is_file() and p not in wanted: wanted.append(p)
+          qa_paths=list(root.rglob('独立验收_DOCX渲染检查_V2.2.json'))
+          qa=json.loads(qa_paths[0].read_text()) if qa_paths else {}
+          lines=['### Selected V2.2 artifact hashes','',f"Visual QA all pass: `{qa.get('all_pass')}`; pages: `{sum((x.get('pages') or 0) for x in qa.get('documents',[]))}`",'']
+          for p in wanted:
+              digest=hashlib.sha256(p.read_bytes()).hexdigest()
+              lines.append(f"- `{digest}`  `{p.name}`  ({p.stat().st_size} bytes)")
+          Path(os.environ['RUNNER_TEMP'],'hash-comment.md').write_text('\n'.join(lines))
           PY
-          gh pr comment 5 --repo mumaren2023/202510mumaren --body-file "$RUNNER_TEMP/manifest-comment.md"
+          gh pr comment 5 --repo mumaren2023/202510mumaren --body-file "$RUNNER_TEMP/hash-comment.md"
