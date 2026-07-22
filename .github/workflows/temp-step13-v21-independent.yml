@@ -8,12 +8,10 @@ on:
       - main
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
 jobs:
   audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Download source immediately
@@ -25,40 +23,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install validation dependencies
-        run: pip install -q jsonschema
-      - name: Diagnose V2.0 history regression
+      - name: Install audit dependencies
         run: |
-          python tools/temp_step13_v20_history_diagnose.py \
+          pip install -q jsonschema python-docx openpyxl
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libreoffice-writer poppler-utils fonts-noto-cjk
+      - name: Run full independent acceptance
+        run: |
+          python tools/temp_step13_v21_independent_run.py \
             --source-zip "$RUNNER_TEMP/step13-v21-source.zip" \
-            --output "$RUNNER_TEMP/v20-history-diagnosis" \
-            > "$RUNNER_TEMP/v20-history-diagnosis.log" 2>&1
-      - name: Publish leaf failures only
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          python - <<'PY'
-          import json, os
-          from pathlib import Path
-          data=json.loads((Path(os.environ['RUNNER_TEMP'])/'v20-history-diagnosis'/'v20_history_diagnosis.json').read_text())
-          leaf=[]
-          for f in data.get('failures',[]):
-              v=f.get('value',{})
-              if any(k in v for k in ('case','case_id','test')):
-                  leaf.append({'path':f.get('path'),'value':v})
-          lines=['### V2.0 exact leaf failures','',f"validator returncode: `{data.get('returncode')}`",'',f"leaf failures: `{len(leaf)}`",'']
-          for i,item in enumerate(leaf,1):
-              lines += [f"#### {i}. `{item['path']}`",'```json',json.dumps(item['value'],ensure_ascii=False,indent=2),'```','']
-          Path(os.environ['RUNNER_TEMP'],'leaf-comment.md').write_text('\n'.join(lines))
-          PY
-          gh pr comment 5 --repo mumaren2023/202510mumaren --body-file "$RUNNER_TEMP/leaf-comment.md"
-      - name: Upload diagnosis artifact
-        if: always()
+            --output-dir "$RUNNER_TEMP/step13-v21-independent-output"
+      - name: Upload independent acceptance artifact
         uses: actions/upload-artifact@v4
         with:
-          name: step13-v20-history-diagnosis
+          name: step13-v21-independent-audit-final
           path: |
-            ${{ runner.temp }}/v20-history-diagnosis/**
-            ${{ runner.temp }}/v20-history-diagnosis.log
+            ${{ runner.temp }}/step13-v21-independent-output/**
+            ${{ runner.temp }}/step13_v21_independent_audit_artifact.zip
           if-no-files-found: error
           retention-days: 3
