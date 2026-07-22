@@ -13,12 +13,14 @@ jobs:
   diagnostic:
     runs-on: ubuntu-latest
     steps:
-      - name: Read build diagnostic tail
+      - name: Read concise build error
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p /tmp/diag
           gh run download 29918787525 --repo mumaren2023/202510mumaren --name step13-v21-build-diagnostics --dir /tmp/diag
-          echo '--- LAST 120 LINES ---'
-          tail -n 120 /tmp/diag/build.log
+          echo '--- ERROR MATCHES ---'
+          grep -nE 'Traceback|RuntimeError|Error|Exception|failed|FAIL|SystemExit|Assertion' /tmp/diag/build.log | tail -n 40 || true
+          echo '--- LAST 35 LINES ---'
+          tail -n 35 /tmp/diag/build.log
           echo '--- END ---'
