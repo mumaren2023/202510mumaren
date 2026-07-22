@@ -13,12 +13,12 @@ jobs:
   diagnostic:
     runs-on: ubuntu-latest
     steps:
-      - name: Read build diagnostic
+      - name: Read build diagnostic tail
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p /tmp/diag
           gh run download 29918787525 --repo mumaren2023/202510mumaren --name step13-v21-build-diagnostics --dir /tmp/diag
-          echo '--- BUILD DIAGNOSTIC ---'
-          cat /tmp/diag/build.log
-          echo '--- END DIAGNOSTIC ---'
+          echo '--- LAST 120 LINES ---'
+          tail -n 120 /tmp/diag/build.log
+          echo '--- END ---'
