@@ -8,17 +8,15 @@ on:
       - main
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
 jobs:
   audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Download source immediately
         env:
-          SOURCE_URL: "https://sdmntprkoreacentral.oaiusercontent.com/files/00000000-5d20-8206-a564-5f2f76e26e4f/raw?se=2026-07-22T13:35:20Z&sp=r&sv=2026-02-06&sr=b&scid=2e89c39f-ce0d-52cd-bb3d-3240179726d6&skoid=1e4bb9ed-6bb5-424a-a3aa-79f21566e722&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-07-21T23:52:38Z&ske=2026-07-23T23:52:38Z&sks=b&skv=2026-02-06&sig=e8C%2BEtEiCno5JdkLZiKRkZHTpz0JHjT4xkZlmEtaVWI%3D"
+          SOURCE_URL: "https://sdmntprkoreacentral.oaiusercontent.com/files/00000000-296c-8206-9554-b50441174fec/raw?se=2026-07-22T13:38:08Z&sp=r&sv=2026-02-06&sr=b&scid=2afc096f-86d4-5262-9ee4-f137d48a58df&skoid=1e4bb9ed-6bb5-424a-a3aa-79f21566e722&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-07-22T01:11:45Z&ske=2026-07-24T01:11:45Z&sks=b&skv=2026-02-06&sig=VdzvEuITmjkUTr0h4kcFXBgLK6ecJbeu8Sat7wDZU0A%3D"
         run: |
           curl --fail --location --retry 3 "$SOURCE_URL" --output "$RUNNER_TEMP/step13-v21-source.zip"
           test -s "$RUNNER_TEMP/step13-v21-source.zip"
@@ -26,41 +24,33 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install audit dependencies
-        run: pip install -q jsonschema python-docx openpyxl
-      - name: Run full audit and capture error
         run: |
-          set +e
+          pip install -q jsonschema python-docx openpyxl
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libreoffice-writer poppler-utils fonts-noto-cjk
+      - name: Apply report serialization fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('tools/temp_step13_v21_independent_run.py')
+          text=p.read_text()
+          old="    reports = audit_module.create_reports(out, audit, tests, findings)"
+          new="""    report_audit = dict(audit)\n    for key in ('v21_tests', 'v20_tests'):\n        value = report_audit.get(key)\n        if isinstance(value, dict):\n            report_audit[key] = f\"{value.get('passed')}/{value.get('total')}（失败{value.get('failed')}）\"\n    reports = audit_module.create_reports(out, report_audit, tests, findings)"""
+          if old not in text:
+              raise SystemExit('target line not found')
+          p.write_text(text.replace(old,new))
+          PY
+      - name: Run full independent acceptance
+        run: |
           python tools/temp_step13_v21_independent_run.py \
             --source-zip "$RUNNER_TEMP/step13-v21-source.zip" \
-            --output-dir "$RUNNER_TEMP/step13-v21-independent-output" \
-            > "$RUNNER_TEMP/full-audit.log" 2>&1
-          echo "$?" > "$RUNNER_TEMP/full-audit-exit.txt"
-          exit 0
-      - name: Publish concise full-audit error
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          {
-            echo '### Full independent audit debug'
-            echo
-            echo 'Exit code:'
-            echo '```'
-            cat "$RUNNER_TEMP/full-audit-exit.txt"
-            echo '```'
-            echo 'Log tail:'
-            echo '```text'
-            tail -n 160 "$RUNNER_TEMP/full-audit.log"
-            echo '```'
-          } > "$RUNNER_TEMP/comment.md"
-          gh pr comment 5 --repo mumaren2023/202510mumaren --body-file "$RUNNER_TEMP/comment.md"
-      - name: Upload debug artifact
-        if: always()
+            --output-dir "$RUNNER_TEMP/step13-v21-independent-output"
+      - name: Upload independent acceptance artifact
         uses: actions/upload-artifact@v4
         with:
-          name: step13-v21-independent-audit-debug-full
+          name: step13-v21-independent-audit-final
           path: |
             ${{ runner.temp }}/step13-v21-independent-output/**
-            ${{ runner.temp }}/full-audit.log
-            ${{ runner.temp }}/full-audit-exit.txt
-          if-no-files-found: warn
+            ${{ runner.temp }}/step13_v21_independent_audit_artifact.zip
+          if-no-files-found: error
           retention-days: 3
