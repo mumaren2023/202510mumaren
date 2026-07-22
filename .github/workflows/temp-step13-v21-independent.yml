@@ -8,6 +8,8 @@ on:
       - main
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 jobs:
   audit:
     runs-on: ubuntu-latest
@@ -16,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Download source immediately
         env:
-          SOURCE_URL: "https://sdmntprkoreacentral.oaiusercontent.com/files/00000000-2800-8206-8784-01c9a6926b2b/raw?se=2026-07-22T13:19:04Z&sp=r&sv=2026-02-06&sr=b&scid=b76d08e2-434b-59d2-9651-29625b8e2045&skoid=1e4bb9ed-6bb5-424a-a3aa-79f21566e722&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-07-21T21:35:33Z&ske=2026-07-23T21:35:33Z&sks=b&skv=2026-02-06&sig=JPQpX4J76iQ0OhZiLs%2B6hifYtmfTtwQUnlGimNX2T1Q%3D"
+          SOURCE_URL: "https://sdmntprkoreacentral.oaiusercontent.com/files/00000000-53e0-8206-ab66-1dec798a8a33/raw?se=2026-07-22T13:20:28Z&sp=r&sv=2026-02-06&sr=b&scid=d63ed3f9-1315-59bb-86fe-cddac622656d&skoid=1e4bb9ed-6bb5-424a-a3aa-79f21566e722&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-07-21T23:41:20Z&ske=2026-07-23T23:41:20Z&sks=b&skv=2026-02-06&sig=BO5kMHBKsBcn67pgHkmX6IGfAVDC/aygp%2BcHJo5ZBUE%3D"
         run: |
           curl --fail --location --retry 3 "$SOURCE_URL" --output "$RUNNER_TEMP/step13-v21-source.zip"
           test -s "$RUNNER_TEMP/step13-v21-source.zip"
@@ -25,8 +27,7 @@ jobs:
           python-version: '3.11'
       - name: Install minimal dependencies
         run: pip install -q jsonschema python-docx openpyxl
-      - name: Run audit and print concise error
-        continue-on-error: true
+      - name: Run audit and capture error
         run: |
           set +e
           python tools/temp_step13_v21_independent_audit.py \
@@ -35,9 +36,24 @@ jobs:
             > "$RUNNER_TEMP/independent-audit.log" 2>&1
           code=$?
           echo "$code" > "$RUNNER_TEMP/independent-audit-exit-code.txt"
-          echo '--- AUDIT LOG TAIL ---'
-          tail -n 120 "$RUNNER_TEMP/independent-audit.log"
           exit 0
+      - name: Publish concise debug result to temporary PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo '### Temporary independent audit debug'
+            echo
+            echo 'Exit code:'
+            echo '```'
+            cat "$RUNNER_TEMP/independent-audit-exit-code.txt"
+            echo '```'
+            echo 'Log tail:'
+            echo '```text'
+            tail -n 120 "$RUNNER_TEMP/independent-audit.log"
+            echo '```'
+          } > "$RUNNER_TEMP/pr-comment.md"
+          gh pr comment 5 --repo mumaren2023/202510mumaren --body-file "$RUNNER_TEMP/pr-comment.md"
       - name: Upload debug artifact
         if: always()
         uses: actions/upload-artifact@v4
