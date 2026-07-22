@@ -10,46 +10,17 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  diagnostic:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Install complete build dependencies
-        run: python -m pip install --disable-pip-version-check python-docx openpyxl jsonschema referencing rpds-py attrs jsonschema-specifications
-      - name: Build and validate V2.1 candidate
-        id: build
-        shell: bash
+      - name: Read concise build error
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          set -uo pipefail
-          SOURCE_URL='https://sdmntprkoreacentral.oaiusercontent.com/files/00000000-f268-8206-b0fb-cd0b6423fd76/raw?se=2026-07-22T12:24:54Z&sp=r&sv=2026-02-06&sr=b&scid=94f4eef4-106b-5384-b038-cc8eebeeaa8d&skoid=1e4bb9ed-6bb5-424a-a3aa-79f21566e722&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-07-21T23:45:45Z&ske=2026-07-23T23:45:45Z&sks=b&skv=2026-02-06&sig=P9JBAsEysENBPotbIp9HtyWionlB6bhHaGrCv%2BIfhXc%3D'
-          {
-            set -x
-            curl -L --fail --retry 3 "$SOURCE_URL" -o /tmp/v20-source.zip
-            file /tmp/v20-source.zip
-            unzip -t /tmp/v20-source.zip >/tmp/unzip-test.txt
-            tail -n 4 /tmp/unzip-test.txt
-            python tools/temp_step13_v21_repair.py \
-              --source-url "$SOURCE_URL" \
-              --output-dir /tmp/step13-v21-output
-            find /tmp/step13-v21-output -maxdepth 1 -type f -printf '%f\n' | sort
-            cat /tmp/step13-v21-output/build_result.json
-          } > /tmp/build.log 2>&1
-          STATUS=$?
-          tail -n 180 /tmp/build.log
-          exit $STATUS
-      - name: Upload build diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: step13-v21-build-diagnostics
-          path: /tmp/build.log
-          if-no-files-found: error
-          retention-days: 3
-      - name: Upload V2.1 candidate artifacts
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: step13-v21-candidate
-          path: /tmp/step13-v21-output/*
-          if-no-files-found: error
-          retention-days: 3
+          mkdir -p /tmp/diag
+          gh run download 29919251189 --repo mumaren2023/202510mumaren --name step13-v21-build-diagnostics --dir /tmp/diag
+          echo '--- ERROR MATCHES ---'
+          grep -nE 'Traceback|RuntimeError|Error|Exception|failed|FAIL|SystemExit|Assertion|ModuleNotFound' /tmp/diag/build.log | tail -n 40 || true
+          echo '--- LAST 45 LINES ---'
+          tail -n 45 /tmp/diag/build.log
+          echo '--- END ---'
