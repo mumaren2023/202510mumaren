@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Download source immediately
         env:
-          SOURCE_URL: "https://sdmntprkoreacentral.oaiusercontent.com/files/00000000-4234-8206-83cb-223d4704a6c4/raw?se=2026-07-22T13:13:49Z&sp=r&sv=2026-02-06&sr=b&scid=e1588825-7e58-5c1e-8979-6e4438a6ef37&skoid=1e4bb9ed-6bb5-424a-a3aa-79f21566e722&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-07-21T23:35:56Z&ske=2026-07-23T23:35:56Z&sks=b&skv=2026-02-06&sig=lr03S1dJcGJYeVaVFMnonbbpaffCs2S75fLnatFfu%2Bo%3D"
+          SOURCE_URL: "https://sdmntprjapaneast.oaiusercontent.com/files/00000000-10f0-8209-bd4e-d803b321206c/raw?se=2026-07-22T13:15:52Z&sp=r&sv=2026-02-06&sr=b&scid=0139af88-4f87-5788-b40d-5efc91dcd20b&skoid=1e4bb9ed-6bb5-424a-a3aa-79f21566e722&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-07-22T00:55:28Z&ske=2026-07-24T00:55:28Z&sks=b&skv=2026-02-06&sig=5pQTvqN2Tr7Duiyidj4uC6m%2B0vMq0PTX/SWCuOF5z2k%3D"
         run: |
           curl --fail --location --retry 3 "$SOURCE_URL" --output "$RUNNER_TEMP/step13-v21-source.zip"
           test -s "$RUNNER_TEMP/step13-v21-source.zip"
@@ -29,17 +29,28 @@ jobs:
           pip install jsonschema python-docx openpyxl
           sudo apt-get update -qq
           sudo apt-get install -y -qq libreoffice-writer poppler-utils fonts-noto-cjk
-      - name: Run independent audit
+      - name: Run independent audit and capture log
+        id: audit_run
+        continue-on-error: true
         run: |
+          set +e
           python tools/temp_step13_v21_independent_audit.py \
             --source-url "file://$RUNNER_TEMP/step13-v21-source.zip" \
-            --output-dir "$RUNNER_TEMP/step13-v21-independent-output"
-      - name: Upload independent audit artifact
+            --output-dir "$RUNNER_TEMP/step13-v21-independent-output" \
+            > "$RUNNER_TEMP/independent-audit.log" 2>&1
+          code=$?
+          echo "$code" > "$RUNNER_TEMP/independent-audit-exit-code.txt"
+          cat "$RUNNER_TEMP/independent-audit.log"
+          exit 0
+      - name: Upload independent audit artifact and logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: step13-v21-independent-audit
           path: |
             ${{ runner.temp }}/step13-v21-independent-output/**
             ${{ runner.temp }}/step13_v21_independent_audit_artifact.zip
-          if-no-files-found: error
+            ${{ runner.temp }}/independent-audit.log
+            ${{ runner.temp }}/independent-audit-exit-code.txt
+          if-no-files-found: warn
           retention-days: 3
