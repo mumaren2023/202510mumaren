@@ -16,12 +16,17 @@ jobs:
       - name: Probe OneDrive source link
         shell: bash
         run: |
-          set -euxo pipefail
-          curl -L --fail --retry 3 'https://1drv.ms/w/s!ACvrbSoGybQogS8?download=1' -o /tmp/source.bin
-          ls -lh /tmp/source.bin
-          file /tmp/source.bin
+          set -u
+          URL='https://1drv.ms/w/s!ACvrbSoGybQogS8?download=1'
+          CODE=$(curl -L -sS -D /tmp/headers.txt -w '%{http_code}' "$URL" -o /tmp/source.bin || true)
+          echo "HTTP_CODE=$CODE"
+          cat /tmp/headers.txt || true
+          ls -lh /tmp/source.bin || true
+          file /tmp/source.bin || true
           python - <<'PY'
           from pathlib import Path
           p=Path('/tmp/source.bin')
-          print(p.read_bytes()[:16])
+          print('EXISTS',p.exists(),'SIZE',p.stat().st_size if p.exists() else None)
+          print('HEAD',p.read_bytes()[:64] if p.exists() else None)
           PY
+          test -s /tmp/source.bin
