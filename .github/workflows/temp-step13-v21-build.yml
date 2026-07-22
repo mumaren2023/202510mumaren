@@ -6,21 +6,42 @@ on:
   workflow_dispatch:
 
 permissions:
-  actions: read
   contents: read
 
 jobs:
-  diagnostic:
+  diagnose-v20:
     runs-on: ubuntu-latest
     steps:
-      - name: Read concise build error
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Install pinned historical dependencies
         run: |
-          mkdir -p /tmp/diag
-          gh run download 29919570660 --repo mumaren2023/202510mumaren --name step13-v21-build-diagnostics --dir /tmp/diag
-          echo '--- ERROR MATCHES ---'
-          grep -nE 'Traceback|RuntimeError|Error|Exception|failed|FAIL|SystemExit|Assertion|ModuleNotFound|TypeError' /tmp/diag/build.log | tail -n 50 || true
-          echo '--- LAST 55 LINES ---'
-          tail -n 55 /tmp/diag/build.log
-          echo '--- END ---'
+          python -m pip install --disable-pip-version-check --force-reinstall \
+            attrs rpds-py referencing==0.36.2 jsonschema-specifications==2025.4.1 jsonschema==4.25.1
+      - name: Run V2.0 and print only failures
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SOURCE_URL='https://sdmntprkoreacentral.oaiusercontent.com/files/00000000-51ec-8206-866f-acc7962baf7c/raw?se=2026-07-22T12:34:39Z&sp=r&sv=2026-02-06&sr=b&scid=35123f0e-6040-5d34-9f6b-493001f26cef&skoid=1e4bb9ed-6bb5-424a-a3aa-79f21566e722&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-07-21T22:13:47Z&ske=2026-07-23T22:13:47Z&sks=b&skv=2026-02-06&sig=GrR/7qlracuKQjSg/7iGKFfWara2MZPt%2B4PW0MUhx2A%3D'
+          curl -L --fail --retry 3 "$SOURCE_URL" -o /tmp/v20.zip
+          mkdir /tmp/v20 && unzip -q /tmp/v20.zip -d /tmp/v20
+          ROOT=$(find /tmp/v20 -mindepth 1 -maxdepth 1 -type d | head -n1)
+          cp -a "$ROOT/current" /tmp/regression
+          PYTHONDONTWRITEBYTECODE=1 python /tmp/regression/validate_current.py || true
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          reports=Path('/tmp/regression/reports')
+          for name in ['automatic_test_report_v20.json','destructive_test_report_v20.json','manual_process_test_report_v20.json','validation_summary_v20.json']:
+              p=reports/name
+              print('\n###',name,'exists=',p.exists())
+              if not p.exists():
+                  continue
+              data=json.loads(p.read_text(encoding='utf-8'))
+              print('SUMMARY', {k:data.get(k) for k in ['passed','total','failed','result','combined'] if k in data})
+              for key in ['checks','results','tests','cases']:
+                  items=data.get(key)
+                  if isinstance(items,list):
+                      for item in items:
+                          ok=item.get('ok',item.get('passed',item.get('result') in ['PASS','pass',True]))
+                          if not ok:
+                              print('FAILED',json.dumps(item,ensure_ascii=False))
+          PY
