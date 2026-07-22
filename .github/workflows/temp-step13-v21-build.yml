@@ -12,36 +12,34 @@ jobs:
   diagnose-v20:
     runs-on: ubuntu-latest
     steps:
-      - name: Install pinned historical dependencies
-        run: |
-          python -m pip install --disable-pip-version-check --force-reinstall \
-            attrs rpds-py referencing==0.36.2 jsonschema-specifications==2025.4.1 jsonschema==4.25.1
-      - name: Run V2.0 and print only failures
+      - name: Run V2.0 and emit concise failures
         shell: bash
         run: |
-          set -euxo pipefail
+          set -euo pipefail
+          python -m pip install -q --disable-pip-version-check --force-reinstall attrs rpds-py referencing==0.36.2 jsonschema-specifications==2025.4.1 jsonschema==4.25.1
           SOURCE_URL='https://sdmntprkoreacentral.oaiusercontent.com/files/00000000-51ec-8206-866f-acc7962baf7c/raw?se=2026-07-22T12:34:39Z&sp=r&sv=2026-02-06&sr=b&scid=35123f0e-6040-5d34-9f6b-493001f26cef&skoid=1e4bb9ed-6bb5-424a-a3aa-79f21566e722&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-07-21T22:13:47Z&ske=2026-07-23T22:13:47Z&sks=b&skv=2026-02-06&sig=GrR/7qlracuKQjSg/7iGKFfWara2MZPt%2B4PW0MUhx2A%3D'
-          curl -L --fail --retry 3 "$SOURCE_URL" -o /tmp/v20.zip
+          curl -LsS --fail "$SOURCE_URL" -o /tmp/v20.zip
           mkdir /tmp/v20 && unzip -q /tmp/v20.zip -d /tmp/v20
           ROOT=$(find /tmp/v20 -mindepth 1 -maxdepth 1 -type d | head -n1)
           cp -a "$ROOT/current" /tmp/regression
-          PYTHONDONTWRITEBYTECODE=1 python /tmp/regression/validate_current.py || true
+          PYTHONDONTWRITEBYTECODE=1 python /tmp/regression/validate_current.py >/tmp/validator.out 2>&1 || true
           python - <<'PY'
           from pathlib import Path
           import json
           reports=Path('/tmp/regression/reports')
+          output=[]
           for name in ['automatic_test_report_v20.json','destructive_test_report_v20.json','manual_process_test_report_v20.json','validation_summary_v20.json']:
               p=reports/name
-              print('\n###',name,'exists=',p.exists())
-              if not p.exists():
-                  continue
+              output.append(f'### {name} exists={p.exists()}')
+              if not p.exists(): continue
               data=json.loads(p.read_text(encoding='utf-8'))
-              print('SUMMARY', {k:data.get(k) for k in ['passed','total','failed','result','combined'] if k in data})
+              output.append('SUMMARY '+json.dumps({k:data.get(k) for k in ['passed','total','failed','result','combined'] if k in data},ensure_ascii=False))
               for key in ['checks','results','tests','cases']:
                   items=data.get(key)
                   if isinstance(items,list):
                       for item in items:
                           ok=item.get('ok',item.get('passed',item.get('result') in ['PASS','pass',True]))
-                          if not ok:
-                              print('FAILED',json.dumps(item,ensure_ascii=False))
+                          if not ok: output.append('FAILED '+json.dumps(item,ensure_ascii=False))
+          Path('/tmp/failures.txt').write_text('\n'.join(output),encoding='utf-8')
           PY
+          cat /tmp/failures.txt
