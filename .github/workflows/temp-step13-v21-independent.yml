@@ -13,56 +13,54 @@ permissions:
 jobs:
   audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - name: Download source immediately
         env:
-          SOURCE_URL: "https://sdmntprkoreacentral.oaiusercontent.com/files/00000000-53e0-8206-ab66-1dec798a8a33/raw?se=2026-07-22T13:20:28Z&sp=r&sv=2026-02-06&sr=b&scid=d63ed3f9-1315-59bb-86fe-cddac622656d&skoid=1e4bb9ed-6bb5-424a-a3aa-79f21566e722&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-07-21T23:41:20Z&ske=2026-07-23T23:41:20Z&sks=b&skv=2026-02-06&sig=BO5kMHBKsBcn67pgHkmX6IGfAVDC/aygp%2BcHJo5ZBUE%3D"
+          SOURCE_URL: "https://sdmntprkoreacentral.oaiusercontent.com/files/00000000-dc18-8206-80a7-5728717eeffe/raw?se=2026-07-22T13:23:02Z&sp=r&sv=2026-02-06&sr=b&scid=e7864ed3-ce73-56ce-8600-997e9a13bd99&skoid=1e4bb9ed-6bb5-424a-a3aa-79f21566e722&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-07-22T11:27:53Z&ske=2026-07-24T11:27:53Z&sks=b&skv=2026-02-06&sig=OYsBaLNUm1kUSOAZjsR0td43INQtiwmlcI3mvFgVIds%3D"
         run: |
           curl --fail --location --retry 3 "$SOURCE_URL" --output "$RUNNER_TEMP/step13-v21-source.zip"
           test -s "$RUNNER_TEMP/step13-v21-source.zip"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install minimal dependencies
-        run: pip install -q jsonschema python-docx openpyxl
-      - name: Run audit and capture error
+      - name: Install validation dependencies
+        run: pip install -q jsonschema
+      - name: Diagnose V2.0 history regression
         run: |
-          set +e
-          python tools/temp_step13_v21_independent_audit.py \
-            --source-url "file://$RUNNER_TEMP/step13-v21-source.zip" \
-            --output-dir "$RUNNER_TEMP/step13-v21-independent-output" \
-            > "$RUNNER_TEMP/independent-audit.log" 2>&1
-          code=$?
-          echo "$code" > "$RUNNER_TEMP/independent-audit-exit-code.txt"
-          exit 0
-      - name: Publish concise debug result to temporary PR
+          python tools/temp_step13_v20_history_diagnose.py \
+            --source-zip "$RUNNER_TEMP/step13-v21-source.zip" \
+            --output "$RUNNER_TEMP/v20-history-diagnosis" \
+            > "$RUNNER_TEMP/v20-history-diagnosis.log" 2>&1
+          cat "$RUNNER_TEMP/v20-history-diagnosis.log"
+      - name: Publish diagnosis to temporary PR
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           {
-            echo '### Temporary independent audit debug'
+            echo '### V2.0 history regression diagnosis'
             echo
-            echo 'Exit code:'
-            echo '```'
-            cat "$RUNNER_TEMP/independent-audit-exit-code.txt"
-            echo '```'
-            echo 'Log tail:'
-            echo '```text'
-            tail -n 120 "$RUNNER_TEMP/independent-audit.log"
+            echo '```json'
+            cat "$RUNNER_TEMP/v20-history-diagnosis/v20_history_diagnosis.json"
             echo '```'
           } > "$RUNNER_TEMP/pr-comment.md"
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('${{ runner.temp }}/pr-comment.md')
+          text=p.read_text()
+          if len(text)>60000:
+              text=text[:59000]+'\n```\n\n[truncated]'
+              p.write_text(text)
+          PY
           gh pr comment 5 --repo mumaren2023/202510mumaren --body-file "$RUNNER_TEMP/pr-comment.md"
-      - name: Upload debug artifact
+      - name: Upload diagnosis artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: step13-v21-independent-audit
+          name: step13-v20-history-diagnosis
           path: |
-            ${{ runner.temp }}/step13-v21-independent-output/**
-            ${{ runner.temp }}/step13_v21_independent_audit_artifact.zip
-            ${{ runner.temp }}/independent-audit.log
-            ${{ runner.temp }}/independent-audit-exit-code.txt
-          if-no-files-found: warn
+            ${{ runner.temp }}/v20-history-diagnosis/**
+            ${{ runner.temp }}/v20-history-diagnosis.log
+          if-no-files-found: error
           retention-days: 3
