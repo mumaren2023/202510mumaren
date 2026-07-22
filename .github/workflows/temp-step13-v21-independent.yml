@@ -7,55 +7,41 @@ on:
     branches:
       - main
 permissions:
+  actions: read
   contents: read
   issues: write
   pull-requests: write
 jobs:
-  audit:
+  inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
-      - name: Download source immediately
+      - name: Download final audit artifact
         env:
-          SOURCE_URL: "https://sdmntprkoreacentral.oaiusercontent.com/files/00000000-2cac-8206-9226-f09c3dad2d28/raw?se=2026-07-22T13:41:26Z&sp=r&sv=2026-02-06&sr=b&scid=12a2a501-646c-5d53-8e32-5a738771215c&skoid=1e4bb9ed-6bb5-424a-a3aa-79f21566e722&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-07-22T00:55:28Z&ske=2026-07-24T00:55:28Z&sks=b&skv=2026-02-06&sig=gwoHmRjrL%2BOxU0AbckIMFH4QNkFG2rqmyFnQ6rNsYO4%3D"
+          GH_TOKEN: ${{ github.token }}
         run: |
-          curl --fail --location --retry 3 "$SOURCE_URL" --output "$RUNNER_TEMP/step13-v21-source.zip"
-          test -s "$RUNNER_TEMP/step13-v21-source.zip"
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install minimal audit dependencies
-        run: pip install -q jsonschema python-docx openpyxl
-      - name: Apply report serialization fix
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p=Path('tools/temp_step13_v21_independent_run.py')
-          text=p.read_text()
-          old="    reports = audit_module.create_reports(out, audit, tests, findings)"
-          new="""    report_audit = dict(audit)\n    for key in ('v21_tests', 'v20_tests'):\n        value = report_audit.get(key)\n        if isinstance(value, dict):\n            report_audit[key] = f\"{value.get('passed')}/{value.get('total')}（失败{value.get('failed')}）\"\n    reports = audit_module.create_reports(out, report_audit, tests, findings)"""
-          if old not in text:
-              raise SystemExit('target line not found')
-          p.write_text(text.replace(old,new))
-          PY
-      - name: Run independent acceptance
-        run: |
-          python tools/temp_step13_v21_independent_run.py \
-            --source-zip "$RUNNER_TEMP/step13-v21-source.zip" \
-            --output-dir "$RUNNER_TEMP/step13-v21-independent-output"
-      - name: Publish concise final summary
+          mkdir -p "$RUNNER_TEMP/final-artifact"
+          gh run download 29924456427 --repo mumaren2023/202510mumaren --name step13-v21-independent-audit-final --dir "$RUNNER_TEMP/final-artifact"
+      - name: Publish artifact manifest and visual QA
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           python - <<'PY'
-          import json, os
+          import hashlib, json, os
           from pathlib import Path
-          result=json.loads((Path(os.environ['RUNNER_TEMP'])/'step13-v21-independent-output'/'independent_audit_result.json').read_text())
-          audit=result['audit']; findings=result['findings']
-          lines=['### V2.1 final independent acceptance summary','',f"Conclusion: **{result['conclusion']}**",'',f"V2.1 tests: `{audit['v21_tests']}`",f"V2.0 rollback tests: `{audit['v20_tests']}`",f"Independent boundary tests: `{audit['independent_tests']}`",f"Complete SHA match: `{audit['complete_sha_match']}`",f"Manifest errors: `{audit['manifest_errors']}`",f"History compare: `{audit['history_compare']}`",'',f"Findings: `{len(findings)}`",'']
-          for i,f in enumerate(findings,1):
-              lines += [f"#### {i}. {f['issue_id']} / {f['priority']}",f"**{f['title']}**",'',f"Evidence: {f['evidence']}",'',f"Impact: {f['impact']}",'',f"Repair: {f['repair']}",'']
-          Path(os.environ['RUNNER_TEMP'],'final-summary.md').write_text('\n'.join(lines))
+          root=Path(os.environ['RUNNER_TEMP'])/'final-artifact'
+          files=[]
+          for p in sorted(root.rglob('*')):
+              if p.is_file():
+                  files.append({'path':p.relative_to(root).as_posix(),'size':p.stat().st_size,'sha256':hashlib.sha256(p.read_bytes()).hexdigest()})
+          results=list(root.rglob('independent_audit_result.json'))
+          qa_files=list(root.rglob('独立验收_DOCX渲染检查_V2.2.json'))
+          result=json.loads(results[0].read_text()) if results else {}
+          qa=json.loads(qa_files[0].read_text()) if qa_files else {}
+          lines=['### Final independent audit artifact manifest','',f"Conclusion: **{result.get('conclusion')}**",'',f"Visual QA: `{json.dumps(qa,ensure_ascii=False)}`",'',f"Files: `{len(files)}`",'']
+          for item in files:
+              lines.append(f"- `{item['sha256']}`  `{item['path']}`  ({item['size']} bytes)")
+          Path(os.environ['RUNNER_TEMP'],'manifest-comment.md').write_text('\n'.join(lines))
           PY
-          gh pr comment 5 --repo mumaren2023/202510mumaren --body-file "$RUNNER_TEMP/final-summary.md"
+          gh pr comment 5 --repo mumaren2023/202510mumaren --body-file "$RUNNER_TEMP/manifest-comment.md"
