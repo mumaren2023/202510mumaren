@@ -10,45 +10,15 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  diagnostic:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Install build dependencies
-        run: python -m pip install --disable-pip-version-check python-docx openpyxl jsonschema
-      - name: Build and validate V2.1 candidate
-        id: build
-        shell: bash
+      - name: Read build diagnostic
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          set -uo pipefail
-          SOURCE_URL='https://1drv.ms/u/c/28b4c9062a6deb2b/IQDeda2le5kaS7dh47yX0x4VAUtJMJtl08Nvk79LXEq0kbo?download=1'
-          {
-            set -x
-            curl -L --fail --retry 3 "$SOURCE_URL" -o /tmp/v20-source.zip
-            file /tmp/v20-source.zip
-            unzip -t /tmp/v20-source.zip
-            python tools/temp_step13_v21_repair.py \
-              --source-url "$SOURCE_URL" \
-              --output-dir /tmp/step13-v21-output
-            find /tmp/step13-v21-output -maxdepth 1 -type f -printf '%f\n' | sort
-            cat /tmp/step13-v21-output/build_result.json
-          } > /tmp/build.log 2>&1
-          STATUS=$?
-          tail -n 140 /tmp/build.log
-          exit $STATUS
-      - name: Upload build diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: step13-v21-build-diagnostics
-          path: /tmp/build.log
-          if-no-files-found: error
-          retention-days: 3
-      - name: Upload V2.1 candidate artifacts
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: step13-v21-candidate
-          path: /tmp/step13-v21-output/*
-          if-no-files-found: error
-          retention-days: 3
+          mkdir -p /tmp/diag
+          gh run download 29918460814 --repo mumaren2023/202510mumaren --name step13-v21-build-diagnostics --dir /tmp/diag
+          echo '--- BUILD DIAGNOSTIC ---'
+          cat /tmp/diag/build.log
+          echo '--- END DIAGNOSTIC ---'
